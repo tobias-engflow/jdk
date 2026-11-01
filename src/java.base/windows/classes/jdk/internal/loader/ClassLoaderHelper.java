@@ -56,20 +56,39 @@ class ClassLoaderHelper {
      * @param file a native library
      */
     static NativeLoadLibrarySpec nativeLoadLibrarySpecOf(File file) throws IOException {
-        // Like on other platforms, the canonical path is used to uniquely identify the library
-        // for JNI_OnLoad purposes.
-        String name = file.getCanonicalPath();
-        // The name may have symbolic links resolved and is therefore unsuitable for
-        // passing to LoadLibrary: LoadLibrary appends ".DLL" if the name has no extension,
-        // unless it ends in ".".
+        // LoadLibrary appends ".DLL" if the file name has no extension, unless it ends in ".".
         // See: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibrarya
         //
-        // By loading the library from the absolute version of the path specified by the caller, and
-        // relying on LoadLibrary to resolve any symbolic links itself, we ensure that LoadLibrary will
-        // decide whether to append ".DLL" based on the file as given, rather than the potential target
-        // if it's a symbolic link.
-        String absolutePath = file.getAbsolutePath();
-        return new NativeLoadLibrarySpec(name, absolutePath);
+        // The canonical path may have symbolic links resolved and is therefore unsuitable for
+        // passing to LoadLibrary. By loading the library from the absolute version of the path
+        // specified by the caller, and relying on LoadLibrary to resolve any symbolic links itself,
+        // we ensure that LoadLibrary will decide whether to append ".DLL" based on the file as
+        // given, rather than the potential target if it's a symbolic link.
+        //
+        // Trailing dots are removed, because Windows and the rest of the JDK treat "foo." as the
+        // same file as "foo"; they should not instead tell LoadLibrary not to append ".DLL".
+        String path = stripTrailingDots(file.getAbsolutePath());
+
+        // Like on other platforms, the canonical path is used to uniquely identify the library
+        // for JNI_OnLoad purposes. It is the canonical path of the file that LoadLibrary will
+        // load, so that e.g. "foo", "foo.dll" and symbolic links to it identify the same library.
+        String fileName = path.substring(path.lastIndexOf('\\') + 1);
+        String loadedPath = (fileName.indexOf('.') < 0) ? path + ".DLL" : path;
+        String name = new File(loadedPath).getCanonicalPath();
+        return new NativeLoadLibrarySpec(name, path);
+    }
+
+    /**
+     * Removes trailing dots from the last name in the given path, unless that
+     * name consists only of dots.
+     */
+    private static String stripTrailingDots(String path) {
+        int start = path.lastIndexOf('\\') + 1;
+        int end = path.length();
+        while (end > start && path.charAt(end - 1) == '.') {
+            end--;
+        }
+        return (end > start) ? path.substring(0, end) : path;
     }
 
     /**

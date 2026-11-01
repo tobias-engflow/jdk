@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2020, 2025, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2020, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -115,30 +115,34 @@ public final class NativeLibraries {
     public NativeLibrary loadLibrary(Class<?> fromClass, File file) {
         // Check to see if we're attempting to access a static library
         String name = findBuiltinLib(file.getName());
+        final NativeLoadLibrarySpec spec;
         boolean isBuiltin = (name != null);
-        if (!isBuiltin) {
+        if (isBuiltin) {
+            spec = new NativeLoadLibrarySpec(name, name);
+        } else {
             try {
                 if (loadLibraryOnlyIfPresent && !file.exists()) {
                     return null;
                 }
-                name = file.getCanonicalPath();
+                spec = ClassLoaderHelper.nativeLoadLibrarySpecOf(file);
             } catch (IOException e) {
                 return null;
             }
         }
-        return loadLibrary(fromClass, name, isBuiltin);
+        return loadLibrary(fromClass, spec, isBuiltin);
     }
 
     /**
      * Returns a NativeLibrary of the given name.
      *
      * @param fromClass the caller class calling System::loadLibrary
-     * @param name      library name
+     * @param spec      library spec
      * @param isBuiltin built-in library
      * @throws UnsatisfiedLinkError if the native library has already been loaded
      *      and registered in another NativeLibraries
      */
-    private NativeLibrary loadLibrary(Class<?> fromClass, String name, boolean isBuiltin) {
+    private NativeLibrary loadLibrary(Class<?> fromClass, NativeLoadLibrarySpec spec, boolean isBuiltin) {
+        String name = spec.name();
         ClassLoader loader = (fromClass == null) ? null : fromClass.getClassLoader();
         if (this.loader != loader) {
             throw new InternalError(fromClass.getName() + " not allowed to load library");
@@ -180,7 +184,7 @@ public final class NativeLibraries {
                 }
             }
 
-            NativeLibraryImpl lib = new NativeLibraryImpl(fromClass, name, isBuiltin);
+            NativeLibraryImpl lib = new NativeLibraryImpl(fromClass, spec, isBuiltin);
             // load the native library
             NativeLibraryContext.push(lib);
             try {
@@ -283,6 +287,8 @@ public final class NativeLibraries {
         // the canonicalized name of the native library.
         // or static library name
         final String name;
+        // the path to pass to the native library loader
+        private final String path;
         // Indicates if the native library is linked into the VM
         final boolean isBuiltin;
 
@@ -291,9 +297,10 @@ public final class NativeLibraries {
         // the version of JNI environment the native library requires.
         int jniVersion;
 
-        NativeLibraryImpl(Class<?> fromClass, String name, boolean isBuiltin) {
+        NativeLibraryImpl(Class<?> fromClass, NativeLoadLibrarySpec spec, boolean isBuiltin) {
             this.fromClass = fromClass;
-            this.name = name;
+            this.name = spec.name();
+            this.path = spec.path();
             this.isBuiltin = isBuiltin;
         }
 
@@ -323,7 +330,7 @@ public final class NativeLibraries {
                 throw new InternalError("Native library " + name + " has been loaded");
             }
 
-            return load(this, name, isBuiltin, throwExceptionIfFail());
+            return load(this, path, isBuiltin, throwExceptionIfFail());
         }
 
         private boolean throwExceptionIfFail() {
@@ -331,7 +338,7 @@ public final class NativeLibraries {
 
             // If the file exists but fails to load, UnsatisfiedLinkException thrown by the VM
             // will include the error message from dlopen to provide diagnostic information
-            File file = new File(name);
+            File file = new File(path);
             return file.exists();
         }
 
@@ -351,7 +358,7 @@ public final class NativeLibraries {
         // This represents the context when a native library is unloaded
         // and getFromClass() will return null,
         static final NativeLibraryImpl UNLOADER =
-                new NativeLibraryImpl(null, "dummy", false);
+                new NativeLibraryImpl(null, new NativeLoadLibrarySpec("dummy", "dummy"), false);
 
         final String name;
         final long handle;

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2023, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,7 @@
 package jdk.internal.loader;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 
 import jdk.internal.util.OSVersion;
@@ -65,6 +66,16 @@ class ClassLoaderHelper {
             return null;
         }
         return new File(name.substring(0, index) + ".jnilib");
+    }
+
+    /**
+     * Returns the {@link NativeLoadLibrarySpec} for loading the specified native library.
+     *
+     * @param file a native library
+     */
+    static NativeLoadLibrarySpec nativeLoadLibrarySpecOf(File file) throws IOException {
+        String name = file.getCanonicalPath();
+        return new NativeLoadLibrarySpec(name, name);
     }
 
     /**

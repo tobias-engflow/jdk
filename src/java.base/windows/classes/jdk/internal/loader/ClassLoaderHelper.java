@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012, 2021, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2012, 2026, Oracle and/or its affiliates. All rights reserved.
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
  * This code is free software; you can redistribute it and/or modify it
@@ -26,6 +26,7 @@
 package jdk.internal.loader;
 
 import java.io.File;
+import java.io.IOException;
 
 class ClassLoaderHelper {
 
@@ -47,6 +48,28 @@ class ClassLoaderHelper {
      */
     static File mapAlternativeName(File lib) {
         return null;
+    }
+
+    /**
+     * Returns the {@link NativeLoadLibrarySpec} for loading the specified native library.
+     *
+     * @param file a native library
+     */
+    static NativeLoadLibrarySpec nativeLoadLibrarySpecOf(File file) throws IOException {
+        // Like on other platforms, the canonical path is used to uniquely identify the library
+        // for JNI_OnLoad purposes.
+        String name = file.getCanonicalPath();
+        // The name may have symbolic links resolved and is therefore unsuitable for
+        // passing to LoadLibrary: LoadLibrary appends ".DLL" if the name has no extension,
+        // unless it ends in ".".
+        // See: https://learn.microsoft.com/en-us/windows/win32/api/libloaderapi/nf-libloaderapi-loadlibrarya
+        //
+        // By loading the library from the absolute version of the path specified by the caller, and
+        // relying on LoadLibrary to resolve any symbolic links itself, we ensure that LoadLibrary will
+        // decide whether to append ".DLL" based on the file as given, rather than the potential target
+        // if it's a symbolic link.
+        String absolutePath = file.getAbsolutePath();
+        return new NativeLoadLibrarySpec(name, absolutePath);
     }
 
     /**
